@@ -129,8 +129,8 @@ function roundsHtml(selected) {
 
 function packHtml(selected) {
   const packs = [
-    ['daily', '☀️', '日常心动', '生活里最自然的联想'],
-    ['spark', '🌙', '脑洞频道', '奇奇怪怪也想一起']
+    ['daily', '☀️', '日常词', '从周末、夏天这样的词出发'],
+    ['spark', '🌙', '脑洞词', '从一个奇奇怪怪的念头出发']
   ];
   return `<div class="pack-grid">${packs.map(([value, emoji, title, copy]) => `
     <button type="button" class="pack-option ${value === selected ? 'selected' : ''}" data-action="select-pack" data-pack="${value}">
@@ -142,11 +142,17 @@ function packHtml(selected) {
 
 function lastResultHtml() {
   const last = readStorage(LAST_RESULT_KEY, null);
-  if (!last || !last.score && last.score !== 0) return '';
+  if (!last) return '';
+  const detail = last.matchedWord
+    ? `在「${last.matchedWord}」同词相见`
+    : last.matched
+      ? `在「${last.matched}」同词相见`
+      : '十轮之后仍未同词';
+  const badge = last.matchedWord || last.matched ? `第${last.round || '?'}轮` : '10轮';
   return `<div class="last-result-card">
     <div class="last-result-avatars"><span>${escapeHtml(last.avatars?.[0] || '🐶')}</span><span>${escapeHtml(last.avatars?.[1] || '🐱')}</span></div>
-    <div class="last-result-copy"><strong>上次和 ${escapeHtml(last.partnerName || 'TA')} 的同频</strong><small>${escapeHtml(last.matched?.slice(0, 3).join(' · ') || '下一次会更有默契')}</small></div>
-    <div class="last-result-score">${last.score}%</div>
+    <div class="last-result-copy"><strong>上次和 ${escapeHtml(last.partnerName || 'TA')} 的联想</strong><small>${escapeHtml(detail)}</small></div>
+    <div class="last-result-score">${escapeHtml(badge)}</div>
   </div>`;
 }
 
@@ -173,7 +179,7 @@ function renderHome() {
         <section class="hero-copy fade-up delay-1">
           <div class="eyebrow">A LITTLE GAME FOR TWO</div>
           <h1 class="hero-title">我们，会不会<br><em>想到同一个词？</em></h1>
-          <p class="hero-subtitle">各自写下第一反应，看看你们的默契<br>会在哪个词里，刚好相见。</p>
+          <p class="hero-subtitle">从同一个词出发，一轮轮写下联想<br>看看会在哪个词里，刚好相见。</p>
         </section>
 
         <div class="pair-stage fade-up delay-2" aria-hidden="true">
@@ -197,7 +203,7 @@ function renderHome() {
           <button class="secondary-button" type="button" data-action="open-join">${ICONS.key}<span>输入房间号</span></button>
           <button class="secondary-button" type="button" data-action="how-to">${ICONS.spark}<span>怎么玩</span></button>
         </div>
-        <p class="home-note">无需注册 <span></span> 约 3 分钟 <span></span> 只属于你们</p>
+        <p class="home-note">无需注册 <span></span> 最多 10 轮 <span></span> 同词即结束</p>
       </div>
     </div>`;
 }
@@ -209,13 +215,13 @@ function modalBodyHtml() {
     return `
       <div class="sheet-handle"></div>
       <div class="sheet-heading">
-        <div><h2>怎么玩？</h2><p>不用准备，凭第一反应就好。</p></div>
+        <div><h2>怎么玩？</h2><p>从同一个词开始，一轮轮靠近彼此。</p></div>
         <button class="close-button" type="button" data-action="close-modal" aria-label="关闭">${ICONS.close}</button>
       </div>
       <div class="rule-steps">
         <div class="rule-step"><b>01</b><div><strong>邀请一个人</strong><p>创建房间，把链接发给朋友、恋人或那个总和你拌嘴的人。</p></div></div>
-        <div class="rule-step"><b>02</b><div><strong>看见同一个词</strong><p>你们会依次看到同一组提示词，各自写下脑海中冒出的第一个词。</p></div></div>
-        <div class="rule-step"><b>03</b><div><strong>领取默契报告</strong><p>答案相同的词会被点亮。不是考试，越诚实越好玩。</p></div></div>
+        <div class="rule-step"><b>02</b><div><strong>从同一个词出发</strong><p>第一轮两个人看到同一个起始词，各自写下第一个联想到的词。</p></div></div>
+        <div class="rule-step"><b>03</b><div><strong>一轮轮继续联想</strong><p>下一轮根据上一轮双方的两个词继续想。两人写出同一个词就结束，最多 10 轮。</p></div></div>
       </div>
       <button class="primary-button coral" type="button" data-action="open-create">知道了，去邀请</button>`;
   }
@@ -242,16 +248,15 @@ function modalBodyHtml() {
   return `
     <div class="sheet-handle"></div>
     <div class="sheet-heading">
-      <div><h2>创建默契房间</h2><p>选好题目，再把邀请发给那个人。</p></div>
+      <div><h2>创建默契房间</h2><p>选一个起始词频道，再把邀请发给那个人。</p></div>
       <button class="close-button" type="button" data-action="close-modal" aria-label="关闭">${ICONS.close}</button>
     </div>
     <label class="field-label" for="create-name">你的昵称</label>
     <input id="create-name" class="text-field" data-field="modal-name" value="${escapeHtml(modal.name || '')}" maxlength="12" autocomplete="nickname" placeholder="写一个 TA 熟悉的称呼" />
     <div class="field-label">选一个头像 <span>见面先认脸</span></div>
     ${avatarPickerHtml(modal.avatar, 'modal')}
-    <div class="field-label">挑战长度 <span>建议第一次选 10 题</span></div>
-    ${roundsHtml(modal.rounds)}
-    <div class="field-label">题目频道 <span>凭第一反应</span></div>
+    <div class="round-limit-card"><strong>最多 10 轮</strong><span>每轮根据上一轮双方的两个词继续联想，双方写出同一个词就立即结束。</span></div>
+    <div class="field-label">起始词频道 <span>每局随机</span></div>
     ${packHtml(modal.pack)}
     <p class="form-error ${modal.error ? 'visible' : ''}" id="form-error">${escapeHtml(modal.error || '')}</p>
     <button class="primary-button coral" type="button" data-action="create-room" ${modal.busy ? 'disabled' : ''}>
@@ -450,7 +455,7 @@ function renderRoomLobby(room = state.room) {
   app.innerHTML = `
     <div class="screen room-screen">
       <header class="subpage-header fade-up">
-        <span class="subpage-title">默契房间 · ${room.rounds} 题</span>
+        <span class="subpage-title">默契房间 · 最多 10 轮</span>
         <button class="room-code-pill" type="button" data-action="copy-room" aria-label="复制房间号">房间 <b>${escapeHtml(room.code)}</b></button>
       </header>
 
@@ -473,7 +478,7 @@ function renderRoomLobby(room = state.room) {
 
         <div class="room-rules fade-up delay-3">
           <strong>这一局怎么玩</strong>
-          <p>你们会看到同一组提示词。不要商量，不要想太久，写下脑海中冒出的第一个词。相同的词，会变成你们这次相见的证据。</p>
+          <p>两个人从同一个起始词出发。每轮根据上一轮双方写下的两个词继续联想；如果这一轮写出同一个词就结束，否则进入下一轮，最多 10 轮。</p>
         </div>
       </main>
 
@@ -498,9 +503,7 @@ function opponentIndex(room = state.room) {
 function opponentStatusText(room = state.room) {
   const opponent = room?.players?.[opponentIndex(room)];
   if (!opponent) return '等待 TA 加入';
-  if (opponent.submitted) return `${opponent.name} 已写完，正在生成结果`;
-  const count = Number(opponent.answerCount || 0);
-  if (count > 0) return `${opponent.name} 已写到 ${count}/${room.rounds}`;
+  if (opponent.submittedThisRound) return `${opponent.name} 已经想好，等你`;
   return `${opponent.name} 正在想`;
 }
 
@@ -508,20 +511,28 @@ function renderGame() {
   const room = state.room;
   if (!room || room.status !== 'playing') return;
   state.screen = 'game';
-  const prompt = room.prompts[state.currentRound];
-  if (!prompt) return;
-  document.title = `第 ${state.currentRound + 1} 题 · 同词相见`;
-  const progress = Math.round((state.currentRound / room.rounds) * 100);
-  const isLast = state.currentRound === room.rounds - 1;
-  const dots = room.prompts.map((_, index) => `<i class="${index < state.currentRound ? 'done' : index === state.currentRound ? 'current' : ''}"></i>`).join('');
-  const promptLine = room.pack === 'spark'
-    ? `<span class="prompt-word">「${escapeHtml(prompt.text)}」</span><br><span class="soft">你第一个想到的是？</span>`
-    : `<span class="soft">说到</span><br><span class="prompt-word">「${escapeHtml(prompt.text)}」</span><br><span class="soft">你最先想到什么？</span>`;
+  state.currentRound = room.currentRound || 1;
+  const round = state.currentRound;
+  const previous = room.history?.[room.history.length - 1];
+  const baseWords = round === 1 ? [room.seed] : (previous?.answers || []);
+  const progress = Math.round(((round - 1) / room.rounds) * 100);
+  const dots = Array.from({ length: room.rounds }, (_, index) => `<i class="${index + 1 < round ? 'done' : index + 1 === round ? 'current' : ''}"></i>`).join('');
+  const sourceHtml = round === 1
+    ? `<span class="soft">这一局，两个人都从</span><br><span class="prompt-word">「${escapeHtml(room.seed)}」</span><br><span class="soft">开始</span>`
+    : `<div class="chain-source">
+        <span class="chain-source-word">${escapeHtml(baseWords[0] || '')}</span>
+        <span class="chain-plus">+</span>
+        <span class="chain-source-word">${escapeHtml(baseWords[1] || '')}</span>
+      </div>`;
+  const question = round === 1
+    ? '各自写下第一个联想到的词'
+    : '这两个词，让你们各自想到什么？';
 
+  document.title = `第 ${round} 轮 · 同词相见`;
   app.innerHTML = `
     <div class="screen game-screen">
       <header class="game-top fade-up">
-        <div class="game-round-count"><span>${String(state.currentRound + 1).padStart(2, '0')}</span> / ${room.rounds}</div>
+        <div class="game-round-count"><span>${String(round).padStart(2, '0')}</span> / ${room.rounds}</div>
         <div class="opponent-live"><i class="live-dot"></i><span>${escapeHtml(opponentStatusText(room))}</span></div>
       </header>
       <div class="progress-track fade-up"><div class="progress-fill" style="width: ${progress}%"></div></div>
@@ -529,21 +540,22 @@ function renderGame() {
       <main class="prompt-area">
         <section class="prompt-card fade-up delay-1" aria-labelledby="prompt-text">
           <div class="prompt-meta">
-            <span class="prompt-kicker">${escapeHtml(prompt.kicker)}联想</span>
-            <span class="prompt-index">ROUND ${String(state.currentRound + 1).padStart(2, '0')}</span>
+            <span class="prompt-kicker">${round === 1 ? '起始词' : `第 ${round - 1} 轮`}</span>
+            <span class="prompt-index">ROUND ${String(round).padStart(2, '0')}</span>
           </div>
-          <div class="prompt-sentence" id="prompt-text">${promptLine}</div>
-          <p class="prompt-hint">别想太久，第一个冒出来的词最诚实。</p>
+          <div class="prompt-sentence" id="prompt-text">${sourceHtml}</div>
+          <div class="chain-question">${question}</div>
+          <p class="prompt-hint">凭第一反应。两个人写出同一个词，这一局就结束。</p>
         </section>
       </main>
 
       <form class="answer-form fade-up delay-2" id="answer-form" autocomplete="off">
         <div class="answer-input-wrap">
           <input class="answer-input" id="answer-input" data-field="game-input" value="${escapeHtml(state.gameInput)}" maxlength="10" placeholder="只写一个词…" enterkeyhint="done" autocomplete="off" />
-          <button class="answer-submit" type="submit" ${state.gameInput.trim() ? '' : 'disabled'}>${isLast ? '完成' : '就是它'}</button>
+          <button class="answer-submit" type="submit" ${state.gameInput.trim() ? '' : 'disabled'}>就是它</button>
         </div>
         <div class="answer-foot">
-          <span>同一个词，会在结果里相见</span>
+          <span>同词结束 · 不一样就进入下一轮</span>
           <span class="round-dots">${dots}</span>
         </div>
       </form>
@@ -557,66 +569,47 @@ function renderGame() {
 function beginGame(room) {
   state.room = { ...room, you: room.you ?? state.room?.you ?? state.playerIndex };
   state.playerIndex = room.you ?? state.room?.you ?? state.playerIndex;
-  state.gameAnswers = [];
-  state.currentRound = 0;
+  state.currentRound = room.currentRound || 1;
   state.gameInput = '';
-  state.waitingForOpponent = false;
+  state.turnAnswer = '';
+  state.turnSubmitted = false;
+  state.submitError = '';
   renderGame();
 }
 
 function syncGameLive(room) {
   const live = document.querySelector('.opponent-live span');
   if (live) live.textContent = opponentStatusText(room);
-  const waitingText = document.querySelector('[data-live-count]');
-  if (waitingText) waitingText.textContent = opponentStatusText(room);
   const waitingCopy = document.querySelector('[data-wait-copy]');
   if (waitingCopy) {
     const opponent = room.players[opponentIndex(room)];
-    waitingCopy.textContent = opponent?.submitted ? 'TA 也已经写完，默契报告正在展开。' : `正在等 ${opponent?.name || 'TA'} 写下最后一个词。先别催，灵感需要两秒钟。`;
-  }
-}
-
-async function reportProgress(count) {
-  if (!state.room) return;
-  try {
-    await api(`/api/rooms/${encodeURIComponent(state.room.code)}/progress`, {
-      method: 'POST',
-      body: JSON.stringify({ clientId: state.clientId, count })
-    });
-  } catch {
-    // Progress reporting is best-effort; final answers are still submitted.
+    waitingCopy.textContent = opponent?.submittedThisRound
+      ? 'TA 也已经写好了，正在揭晓这一轮。'
+      : `正在等 ${opponent?.name || 'TA'} 写下这一轮的词。先别催，灵感需要两秒钟。`;
   }
 }
 
 async function submitCurrentAnswer() {
   const word = String(state.gameInput || '').trim();
-  if (!word || !state.room) return;
+  if (!word || !state.room || state.turnSubmitted) return;
   if (word.length > 10) {
     showToast('最多写 10 个字');
     return;
   }
-  state.gameAnswers.push(word);
+  state.turnAnswer = word;
+  state.turnSubmitted = true;
   state.gameInput = '';
-  state.currentRound += 1;
-  reportProgress(state.currentRound);
-
-  if (state.currentRound < state.room.rounds) {
-    renderGame();
-    setTimeout(() => document.querySelector('#answer-input')?.focus({ preventScroll: true }), 120);
-    return;
-  }
-  state.waitingForOpponent = true;
   state.submitError = '';
   renderWaiting();
-  await submitFinalAnswers();
+  await sendTurn(word);
 }
 
-async function submitFinalAnswers() {
-  if (!state.room || !state.gameAnswers.length) return;
+async function sendTurn(word = state.turnAnswer) {
+  if (!state.room || !word) return;
   try {
-    const data = await api(`/api/rooms/${encodeURIComponent(state.room.code)}/answers`, {
+    const data = await api(`/api/rooms/${encodeURIComponent(state.room.code)}/turn`, {
       method: 'POST',
-      body: JSON.stringify({ clientId: state.clientId, answers: state.gameAnswers })
+      body: JSON.stringify({ clientId: state.clientId, word })
     });
     state.submitError = '';
     handleRoomState(data.room);
@@ -626,32 +619,41 @@ async function submitFinalAnswers() {
   }
 }
 
+async function retryTurn() {
+  if (!state.room || !state.turnAnswer) return;
+  state.submitError = '';
+  renderWaiting();
+  await sendTurn(state.turnAnswer);
+}
+
 function renderWaiting() {
   const room = state.room;
   if (!room) return;
   state.screen = 'waiting';
   const me = room.players[state.playerIndex] || room.players[0];
   const opponent = room.players[opponentIndex(room)];
-  const opponentReady = opponent?.submitted;
+  const opponentReady = opponent?.submittedThisRound;
   const error = state.submitError;
-  document.title = '等 TA 写下最后一个词 · 同词相见';
+  const word = state.turnAnswer || me?.currentAnswer || '';
+  document.title = `第 ${room.currentRound} 轮等待中 · 同词相见`;
 
   app.innerHTML = `
     <div class="screen waiting-screen">
       <header class="subpage-header fade-up">
         ${brandHtml(true)}
-        <div class="room-code-pill">房间 <b>${escapeHtml(room.code)}</b></div>
+        <div class="room-code-pill">第 <b>${room.currentRound}</b> / ${room.rounds} 轮</div>
       </header>
       <main class="waiting-main">
         <div class="waiting-orbit fade-up">
           <div class="waiting-avatar">${escapeHtml(me.avatar)}<span class="heart-badge">♥</span></div>
         </div>
-        <h1 class="fade-up delay-1">${error ? '还差一点点' : '你的答案，收好了'}</h1>
-        <p class="fade-up delay-2" data-wait-copy>${error ? escapeHtml(error) : opponentReady ? 'TA 也已经写完，默契报告正在展开。' : `正在等 ${escapeHtml(opponent?.name || 'TA')} 写下最后一个词。先别催，灵感需要两秒钟。`}</p>
-        <div class="waiting-card fade-up delay-3"><span>你的进度</span><b>${room.rounds}/${room.rounds}</b><span>·</span><span data-live-count>${escapeHtml(opponentStatusText(room))}</span></div>
+        <div class="submitted-word fade-up delay-1">${error ? '提交遇到问题' : '你写的是'}<strong>「${escapeHtml(word)}」</strong></div>
+        <h1 class="fade-up delay-1">${error ? '还差一点点' : '等 TA 写下这一轮'}</h1>
+        <p class="fade-up delay-2" data-wait-copy>${error ? escapeHtml(error) : opponentReady ? 'TA 也已经写好了，正在揭晓这一轮。' : `正在等 ${escapeHtml(opponent?.name || 'TA')} 写下这一轮的词。先别催，灵感需要两秒钟。`}</p>
+        <div class="waiting-card fade-up delay-3"><span>本轮</span><b>${room.currentRound} / ${room.rounds}</b><span>·</span><span data-live-count>${escapeHtml(opponentStatusText(room))}</span></div>
         ${error ? '<button class="primary-button coral" type="button" data-action="retry-submit" style="margin-top: 20px; width: auto; padding: 0 24px">重新提交</button>' : ''}
       </main>
-      <div class="waiting-copy fade-up delay-3"><span class="waiting-dots"><i></i><i></i><i></i></span><span>${opponentReady ? '正在生成结果' : '等待不是空白，是在靠近答案'}</span></div>
+      <div class="waiting-copy fade-up delay-3"><span class="waiting-dots"><i></i><i></i><i></i></span><span>${opponentReady ? '正在揭晓这一轮' : '不一样的词，会带你们去下一轮'}</span></div>
     </div>`;
 }
 
@@ -717,42 +719,35 @@ function normalizeWord(word) {
     .replace(/[.,!?;:'"“”‘’、，。！？；：·…—–\-（）()【】\[\]{}《》<>]/g, '');
 }
 
-function resultLevel(score, matchCount) {
-  if (score >= 90) return {
-    title: '灵魂同频，实名羡慕',
-    copy: `一共 ${matchCount} 个词撞在一起。不是巧合，是你们的脑回路真的连上了。`
+function resultLevel(result) {
+  if (!result.matched) return {
+    title: '十轮之后，仍然各自精彩',
+    copy: '你们没有在十轮内写出同一个词，但这条联想轨迹已经记录了两个人完全不同的脑回路。'
   };
-  if (score >= 70) return {
-    title: '心有灵犀，藏不住了',
-    copy: '大部分时候，你们都在同一个频道。那些顺手写下的词，替你们说了很多。'
+  if (result.reachedRound <= 2) return {
+    title: '第一眼，就同频',
+    copy: `只用了 ${result.reachedRound} 轮，你们就在「${result.matchedWord}」相遇。有些默契真的不用解释。`
   };
-  if (score >= 40) return {
-    title: '默契正在发芽',
-    copy: '有些词刚好相见，有些词各走一边。这种刚刚好的不同，也很可爱。'
-  };
-  if (score > 0) return {
-    title: '偶尔相见，也很珍贵',
-    copy: '你们在几个词里短暂相逢。默契不靠分数，靠下一次还想一起玩。'
+  if (result.reachedRound <= 5) return {
+    title: '绕了几步，刚好遇见',
+    copy: `在第 ${result.reachedRound} 轮，你们同时写下了「${result.matchedWord}」。每一次联想，都在悄悄靠近。`
   };
   return {
-    title: '完美错频，也是一种缘分',
-    copy: '一个词都没撞上，说明你们的世界足够大。下一局，说不定就突然同频。'
+    title: '兜兜转转，还是同频',
+    copy: `走到第 ${result.reachedRound} 轮，你们终于一起想到了「${result.matchedWord}」。这条线索只属于你们。`
   };
 }
 
 function calculateResult(room) {
-  const first = room.players[0]?.answers || [];
-  const second = room.players[1]?.answers || [];
-  const rows = room.prompts.map((prompt, index) => ({
-    index,
-    prompt: prompt.text,
-    first: first[index] || '',
-    second: second[index] || '',
-    matched: normalizeWord(first[index]) === normalizeWord(second[index]) && Boolean(normalizeWord(first[index]))
-  }));
-  const matches = rows.filter((row) => row.matched);
-  const score = room.rounds ? Math.round((matches.length / room.rounds) * 100) : 0;
-  return { rows, matches, score };
+  const history = room.history || [];
+  const last = history[history.length - 1];
+  return {
+    history,
+    matched: Boolean(last?.matched),
+    matchedWord: last?.matched ? last.answers[0] : '',
+    reachedRound: last?.round || room.currentRound || 1,
+    maxRounds: room.rounds || 10
+  };
 }
 
 function saveLastResult(result) {
@@ -761,27 +756,33 @@ function saveLastResult(result) {
   const me = room.players[state.playerIndex] || room.players[0];
   const opponent = room.players[opponentIndex(room)] || room.players[1];
   writeStorage(LAST_RESULT_KEY, {
-    score: result.score,
-    matched: result.matches.map((item) => item.first),
+    matched: result.matched,
+    matchedWord: result.matchedWord,
+    round: result.reachedRound,
     partnerName: opponent?.name || 'TA',
     avatars: [me?.avatar || '🐶', opponent?.avatar || '🐱'],
     at: Date.now()
   });
 }
 
-function answerRowsHtml(result, showAll) {
-  const visible = showAll ? result.rows : result.rows.slice(0, 6);
-  const rows = visible.map((row) => `
-    <div class="answer-row ${row.matched ? 'matched' : ''}">
-      <span class="answer-index">${String(row.index + 1).padStart(2, '0')}</span>
-      <span class="answer-word ${row.matched ? 'matched' : ''}" title="${escapeHtml(row.first)}">${escapeHtml(row.first)}</span>
-      <span class="answer-equal">${row.matched ? '♥' : '≠'}</span>
-      <span class="answer-word ${row.matched ? 'matched' : ''}" title="${escapeHtml(row.second)}">${escapeHtml(row.second)}</span>
-    </div>`).join('');
-  const more = result.rows.length > 6
-    ? `<button class="answer-more" type="button" data-action="show-all">${showAll ? '收起逐词对照' : `展开全部 ${result.rows.length} 组答案`}</button>`
-    : '';
-  return rows + more;
+function historyRowsHtml(result) {
+  const room = state.room;
+  const playerA = room?.players?.[0];
+  const playerB = room?.players?.[1];
+  const seedRow = `<div class="chain-seed"><span>起始词</span><strong>${escapeHtml(room?.seed || '')}</strong></div>`;
+  const rounds = result.history.map((round) => {
+    const base = (round.baseWords || []).map((word) => `<em>${escapeHtml(word)}</em>`).join('<i>+</i>');
+    return `<article class="chain-round ${round.matched ? 'matched' : ''}">
+      <div class="chain-round-head"><b>ROUND ${String(round.round).padStart(2, '0')}</b><span>${round.matched ? '同词相见' : '继续联想'}</span></div>
+      <div class="chain-base"><span>从</span>${base}</div>
+      <div class="chain-answer-row">
+        <div><small>${escapeHtml(playerA?.name || 'A')}</small><strong>${escapeHtml(round.answers[0])}</strong></div>
+        <span class="chain-result-mark">${round.matched ? '♥' : '≠'}</span>
+        <div><small>${escapeHtml(playerB?.name || 'B')}</small><strong>${escapeHtml(round.answers[1])}</strong></div>
+      </div>
+    </article>`;
+  }).join('');
+  return seedRow + rounds;
 }
 
 function launchConfetti() {
@@ -811,14 +812,13 @@ function renderResults(room = state.room) {
   state.screen = 'results';
   state.room = room;
   closeRoomFeed();
-  document.title = '我们的默契报告 · 同词相见';
+  document.title = '我们的同词相见报告';
   const result = calculateResult(room);
-  const level = resultLevel(result.score, result.matches.length);
+  const level = resultLevel(result);
   const me = room.players[state.playerIndex] || room.players[0];
   const opponent = room.players[opponentIndex(room)] || room.players[1];
   saveLastResult(result);
-
-  const shouldCelebrate = !state.resultShown && result.score >= 40;
+  const shouldCelebrate = !state.resultShown && result.matched;
   state.resultShown = true;
 
   app.innerHTML = `
@@ -830,10 +830,10 @@ function renderResults(room = state.room) {
 
       <main>
         <section class="result-hero fade-up delay-1">
-          <div class="result-eyebrow">YOUR SAME-WORD REPORT</div>
+          <div class="result-eyebrow">YOUR WORD-CHAIN REPORT</div>
           <div class="result-score-wrap">
-            <div class="result-ring" style="--score-angle: ${result.score}%"></div>
-            <div class="result-score">${result.score}<span>%</span></div>
+            <div class="result-ring" style="--score-angle: ${result.matched ? 100 : Math.round((result.reachedRound / result.maxRounds) * 100)}%"></div>
+            <div class="result-score">${String(result.reachedRound).padStart(2, '0')}<span>轮</span></div>
           </div>
           <div class="result-avatars">
             <span class="result-avatar">${escapeHtml(me?.avatar || '🐶')}</span>
@@ -846,16 +846,16 @@ function renderResults(room = state.room) {
 
         <section class="match-section fade-up delay-2">
           <div class="section-title">
-            <strong>${result.matches.length ? `你们有 ${result.matches.length} 次同词相见` : '这次还没有撞到同一个词'}</strong>
+            <strong>${result.matched ? `第 ${result.reachedRound} 轮，同词相见` : `${result.maxRounds} 轮结束，仍未同词`}</strong>
             <span>${escapeHtml(me?.name || '你')} × ${escapeHtml(opponent?.name || 'TA')}</span>
           </div>
-          ${result.matches.length
-            ? `<div class="match-chips">${result.matches.map((match, index) => `<span class="match-chip" style="animation-delay: ${index * 45}ms">${escapeHtml(match.first)}<small>ROUND ${String(match.index + 1).padStart(2, '0')}</small></span>`).join('')}</div>`
-            : '<div class="no-match-card">没有相同的词，不代表没有默契。至少你们都认真回答了同一组问题，这就是一次很特别的约会。</div>'}
+          ${result.matched
+            ? `<div class="match-chips"><span class="match-chip">${escapeHtml(result.matchedWord)}<small>第 ${result.reachedRound} 轮</small></span></div>`
+            : '<div class="no-match-card">没有相同的词，不代表没有默契。至少你们一起走完了十条完全不同的联想路径。</div>'}
         </section>
 
-        <section class="answer-list fade-up delay-3" aria-label="逐词答案">
-          ${answerRowsHtml(result, state.showAllAnswers)}
+        <section class="history-list fade-up delay-3" aria-label="完整联想过程">
+          ${historyRowsHtml(result)}
         </section>
 
         <div class="result-actions fade-up delay-3">
@@ -871,11 +871,10 @@ function renderResults(room = state.room) {
 async function shareResult() {
   if (!state.room) return;
   const result = calculateResult(state.room);
-  const words = result.matches.map((item) => item.first).slice(0, 5).join('、');
   const base = `${window.location.origin}${window.location.pathname}`;
-  const text = result.matches.length
-    ? `我们在「同词相见」撞出了 ${result.score}% 的默契，相同词：${words}。你也来和在意的人试试：${base}`
-    : `我们在「同词相见」完成了 ${state.room.rounds} 道默契题，居然一个词都没撞上，这也是一种缘分。你也来试试：${base}`;
+  const text = result.matched
+    ? `我们在「同词相见」走到第 ${result.reachedRound} 轮，同时写下了「${result.matchedWord}」。你也来和在意的人试试：${base}`
+    : `我们在「同词相见」联想到了第 ${result.reachedRound} 轮，还是没撞到同一个词。你也来试试：${base}`;
   if (navigator.share) {
     try {
       await navigator.share({ title: '我们的同词相见报告', text });
@@ -884,7 +883,7 @@ async function shareResult() {
       if (error?.name === 'AbortError') return;
     }
   }
-  await copyText(text, '默契报告已复制');
+  await copyText(text, '联想报告已复制');
 }
 
 async function createRoomWith(name, avatar, rounds, pack) {
@@ -923,28 +922,41 @@ function handleRoomState(room) {
   const previousYou = state.room?.you ?? state.playerIndex;
   const previousStatus = state.room?.status;
   const previousPlayerCount = state.room?.players?.length || 0;
+  const previousRound = state.room?.currentRound;
   state.room = { ...room, you: room.you ?? previousYou };
   if (room.you !== undefined) state.playerIndex = room.you;
+
   if (room.status === 'waiting') {
     const rosterChanged = previousStatus !== 'waiting' || previousPlayerCount !== room.players.length;
     if (state.screen !== 'room' || rosterChanged) renderRoomLobby(state.room);
     return;
   }
+
   if (room.status === 'playing') {
+    const roundChanged = previousRound !== room.currentRound || state.currentRound !== room.currentRound;
+    state.currentRound = room.currentRound;
     const me = room.players[state.playerIndex];
-    if (me?.submitted) {
-      state.waitingForOpponent = true;
+    if (roundChanged) {
+      state.gameInput = '';
+      state.turnAnswer = '';
+      state.submitError = '';
+    }
+    if (me?.submittedThisRound) {
+      state.turnSubmitted = true;
+      state.turnAnswer = me.currentAnswer || state.turnAnswer;
       if (state.screen !== 'waiting') renderWaiting();
       else syncGameLive(state.room);
       return;
     }
-    if (state.screen === 'room' || state.screen === 'entry') {
-      beginGame(state.room);
-    } else if (state.screen === 'game' || state.screen === 'waiting') {
+    state.turnSubmitted = false;
+    if (state.screen === 'room' || state.screen === 'entry' || state.screen === 'waiting' || roundChanged) {
+      renderGame();
+    } else if (state.screen === 'game') {
       syncGameLive(state.room);
     }
     return;
   }
+
   if (room.status === 'results' && state.screen !== 'results') {
     renderResults(state.room);
   }
@@ -1094,13 +1106,7 @@ document.addEventListener('click', async (event) => {
   }
   if (action === 'share-room') return shareRoom();
   if (action === 'start-game') return startGame();
-  if (action === 'retry-submit') return submitFinalAnswers();
-  if (action === 'show-all') {
-    state.showAllAnswers = !state.showAllAnswers;
-    const list = document.querySelector('.answer-list');
-    if (list && state.room) list.innerHTML = answerRowsHtml(calculateResult(state.room), state.showAllAnswers);
-    return;
-  }
+  if (action === 'retry-submit') return retryTurn();
   if (action === 'play-again') return playAgain();
   if (action === 'share-result') return shareResult();
   if (action === 'create-room') return handleCreate();

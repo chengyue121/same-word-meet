@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '0.0.0.0';
 const rooms = new Map();
 const listeners = new Map();
-const MAX_ANSWERS = 10;
+const MAX_WORD_LENGTH = 10;
 
 const PROMPTS = {
   daily: [
@@ -60,24 +60,9 @@ function randomId() {
   return crypto.randomUUID();
 }
 
-function mulberry32(seed) {
-  return function random() {
-    let t = seed += 0x6D2B79F5;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-
-function makePrompts(pack, rounds) {
+function pickSeed(pack) {
   const source = PROMPTS[pack] || PROMPTS.daily;
-  const shuffled = [...source];
-  const random = mulberry32(Date.now() + Math.floor(Math.random() * 100000));
-  for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled.slice(0, rounds).map(([text, kicker], index) => ({ id: index + 1, text, kicker }));
+  return source[Math.floor(Math.random() * source.length)][0];
 }
 
 function cleanName(value, fallback = '玩家') {
@@ -90,9 +75,12 @@ function cleanAvatar(value) {
   return avatar || '🐶';
 }
 
-function normalizeAnswers(input, rounds) {
-  if (!Array.isArray(input) || input.length !== rounds) throw new Error('答案数量不正确');
-  return input.map((word) => String(word || '').replace(/[\r\n\t]/g, ' ').trim().slice(0, MAX_ANSWERS));
+function normalizeWord(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[.,!?;:'"“”‘’、，。！？；：·…—–\-（）()【】\[\]{}《》<>]/g, '');
 }
 
 function publicRoom(room, clientId) {
@@ -102,14 +90,16 @@ function publicRoom(room, clientId) {
     status: room.status,
     rounds: room.rounds,
     pack: room.pack,
-    prompts: room.prompts,
+    seed: room.seed,
+    currentRound: room.currentRound,
+    history: room.history || [],
+    result: room.result || null,
     createdAt: room.createdAt,
     players: room.players.map((player) => ({
       name: player.name,
       avatar: player.avatar,
-      answerCount: player.progress ?? player.answers?.length ?? 0,
-      submitted: Boolean(player.submittedAt),
-      answers: room.status === 'results' ? player.answers : undefined
+      submittedThisRound: Boolean(room.status === 'playing' && player.submittedRound === room.currentRound),
+      currentAnswer: room.status === 'playing' ? (player.currentAnswer || '') : undefined
     })),
     you: you >= 0 ? you : undefined
   };
@@ -159,22 +149,23 @@ async function handleApi(req, res, url) {
   try {
     if (req.method === 'POST' && url.pathname === '/api/rooms') {
       const body = await readBody(req);
-      const rounds = Number(body.rounds) === 20 ? 20 : 10;
       const pack = body.pack === 'spark' ? 'spark' : 'daily';
       const room = {
         code: randomCode(),
         status: 'waiting',
-        rounds,
+        rounds: 10,
         pack,
-        prompts: makePrompts(pack, rounds),
+        seed: pickSeed(pack),
+        currentRound: 1,
+        history: [],
+        result: null,
         createdAt: Date.now(),
         players: [{
           id: randomId(),
           name: cleanName(body.name),
           avatar: cleanAvatar(body.avatar),
-          answers: [],
-          progress: 0,
-          submittedAt: null
+          currentAnswer: '',
+          submittedRound: 0
         }]
       };
       rooms.set(room.code, room);
@@ -195,9 +186,8 @@ async function handleApi(req, res, url) {
         id: randomId(),
         name: cleanName(body.name, '神秘朋友'),
         avatar: cleanAvatar(body.avatar),
-        answers: [],
-        progress: 0,
-        submittedAt: null
+        currentAnswer: '',
+        submittedRound: 0
       };
       room.players.push(player);
       broadcast(room.code);
@@ -239,36 +229,57 @@ async function handleApi(req, res, url) {
       if (room.status === 'waiting') {
         room.status = 'playing';
         room.startedAt = Date.now();
-        room.players.forEach((item) => { item.progress = 0; });
+        room.currentRound = 1;
+        room.history = [];
+        room.result = null;
+        room.players.forEach((item) => {
+          item.currentAnswer = '';
+          item.submittedRound = 0;
+        });
         broadcast(room.code);
       }
       return json(res, 200, { room: publicRoom(room, body.clientId) });
     }
 
-    if (req.method === 'POST' && parts[1] === 'rooms' && parts[3] === 'progress') {
-      const body = await readBody(req);
-      const player = room.players.find((item) => item.id === body.clientId);
-      if (!player) return json(res, 403, { error: '你不在这个房间里' });
-      if (room.status !== 'playing') return json(res, 200, { room: publicRoom(room, body.clientId) });
-      const count = Math.max(0, Math.min(room.rounds, Number(body.count) || 0));
-      player.progress = Math.max(player.progress || 0, count);
-      broadcast(room.code);
-      return json(res, 200, { room: publicRoom(room, body.clientId) });
-    }
-    if (req.method === 'POST' && parts[1] === 'rooms' && parts[3] === 'answers') {
+    if (req.method === 'POST' && parts[1] === 'rooms' && parts[3] === 'turn') {
       const body = await readBody(req);
       const player = room.players.find((item) => item.id === body.clientId);
       if (!player) return json(res, 403, { error: '你不在这个房间里' });
       if (room.status === 'waiting') return json(res, 409, { error: '挑战还没有开始' });
       if (room.status === 'results') return json(res, 200, { room: publicRoom(room, body.clientId) });
-      const answers = normalizeAnswers(body.answers, room.rounds);
-      if (answers.some((answer) => !answer)) return json(res, 400, { error: '每一题都要写一个词' });
-      player.answers = answers;
-      player.progress = room.rounds;
-      player.submittedAt = Date.now();
-      if (room.players.length === 2 && room.players.every((item) => item.submittedAt)) {
-        room.status = 'results';
-        room.finishedAt = Date.now();
+      if (player.submittedRound === room.currentRound) {
+        return json(res, 200, { room: publicRoom(room, body.clientId) });
+      }
+      const word = String(body.word || '').replace(/[\r\n\t]/g, ' ').trim().slice(0, MAX_WORD_LENGTH);
+      if (!word) return json(res, 400, { error: '这一轮要写一个词' });
+      player.currentAnswer = word;
+      player.submittedRound = room.currentRound;
+      if (room.players.length === 2 && room.players.every((item) => item.submittedRound === room.currentRound)) {
+        const answers = room.players.map((item) => item.currentAnswer);
+        const matched = normalizeWord(answers[0]) === normalizeWord(answers[1]);
+        const previousHistory = room.history[room.history.length - 1];
+        const baseWords = previousHistory ? [...previousHistory.answers] : [room.seed];
+        room.history.push({
+          round: room.currentRound,
+          baseWords,
+          answers: [...answers],
+          matched
+        });
+        if (matched || room.currentRound >= room.rounds) {
+          room.status = 'results';
+          room.result = {
+            matched,
+            reachedRound: room.currentRound,
+            word: matched ? answers[0] : ''
+          };
+          room.finishedAt = Date.now();
+        } else {
+          room.currentRound += 1;
+          room.players.forEach((item) => {
+            item.currentAnswer = '';
+            item.submittedRound = 0;
+          });
+        }
       }
       broadcast(room.code);
       return json(res, 200, { room: publicRoom(room, body.clientId) });
